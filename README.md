@@ -1,5 +1,20 @@
 # ha-eufy-sdk-bridge
 
+> **Fork of [mega-yfue/ha-eufy-sdk-bridge](https://github.com/mega-yfue/ha-eufy-sdk-bridge) (`dev` branch).**
+> All credit for this bridge and the [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk) it runs on goes to
+> [mega-yfue](https://github.com/mega-yfue) and the upstream contributors. It stays under their MIT license.
+> This fork carries a few changes for an S4 Max NVR setup:
+>
+> - **H.264 twin per camera** (`<id>_h264` in go2rtc), transcoded on demand only, so a browser without
+>   H.265 WebRTC can play an H.265 camera (e.g. eufyCam S3 Pro). `GO2RTC_H264=0` turns it off,
+>   `GO2RTC_H264_WIDTH` sets the scaled width (default 1920, 0 = source size).
+> - **More cameras through the NVR**: the SDK is pinned to `0.6.0-beta.72` and patched at build time
+>   (`scripts/patch-sdk.mjs`) so the models in `NVR_EXTRA_MEDIA_MODELS` (default `T8172`, eufyCam S4)
+>   use the NVR's media call. Experimental, untested upstream.
+>
+> Used by the [Nuvolares/ha-eufy-sdk-addon](https://github.com/Nuvolares/ha-eufy-sdk-addon) add-on and the
+> [Nuvolares/ha-eufy-sdk](https://github.com/Nuvolares/ha-eufy-sdk) integration.
+
 [![CI](https://github.com/mega-yfue/ha-eufy-sdk-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mega-yfue/ha-eufy-sdk-bridge/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A524-brightgreen?logo=nodedotjs&logoColor=white)](./package.json)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)

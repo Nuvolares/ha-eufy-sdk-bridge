@@ -90,6 +90,11 @@ export function loadConfig(env = process.env) {
     go2rtcApiPort: positiveInt(env.GO2RTC_API_PORT) ?? 1984,
     go2rtcRtspPort: positiveInt(env.GO2RTC_RTSP_PORT) ?? 8554,
     go2rtcWebrtcPort: positiveInt(env.GO2RTC_WEBRTC_PORT) ?? 8555,
+    // [fork] An on-demand H.264 twin (`<id>_h264`) beside every camera stream, for browsers without H.265
+    // WebRTC. Nothing transcodes until a consumer opens the twin. GO2RTC_H264=0 drops the twins;
+    // GO2RTC_H264_WIDTH scales the twin down to that width (default 1920, 0 keeps the source size).
+    go2rtcH264: env.GO2RTC_H264 == null ? true : truthy(env.GO2RTC_H264),
+    go2rtcH264Width: env.GO2RTC_H264_WIDTH ? Number(env.GO2RTC_H264_WIDTH) : 1920,
     selfHost: env.BRIDGE_SELF_HOST || "127.0.0.1",
     // Cloud poll interval (ms). Unset → the SDK default (600000 = 10 min). Changeable live via the
     // config.set WS command. 0 disables polling.

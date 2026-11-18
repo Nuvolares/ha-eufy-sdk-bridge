@@ -40,14 +40,18 @@ RUN case "${TARGETARCH:-amd64}" in \
 # Install the bridge's deps from npm: the SDK (@mega-yfue/eufy-sdk → pulls mqtt/protobufjs/werift) + ws.
 # `npm ci` installs the exact locked (stable) tree; the dev build then overlays the requested SDK dist-tag
 # on top (see SDK_DIST_TAG above). `--no-save` keeps package.json/lock untouched, so no drift leaks in.
-ARG SDK_DIST_TAG=
+# [fork] Pinned to the beta the fork was tested on (NVR media for T8162/T8410/T8214), not a moving tag,
+# then patched so more NVR cameras (NVR_EXTRA_MEDIA_MODELS, default T8172) use the NVR's media call.
+ARG SDK_DIST_TAG=0.6.0-beta.72
 COPY package.json package-lock.json ./
+COPY scripts/patch-sdk.mjs ./scripts/
 RUN npm ci --omit=dev --no-audit --no-fund \
  && if [ -n "$SDK_DIST_TAG" ]; then \
       echo "SDK_DIST_TAG=$SDK_DIST_TAG → overlaying @mega-yfue/eufy-sdk@$SDK_DIST_TAG (dev channel)"; \
       npm install --omit=dev --no-audit --no-fund --no-save "@mega-yfue/eufy-sdk@$SDK_DIST_TAG"; \
       node -e "console.log('SDK now:', JSON.parse(require('fs').readFileSync('node_modules/@mega-yfue/eufy-sdk/package.json')).version)"; \
-    fi
+    fi \
+ && node scripts/patch-sdk.mjs
 
 COPY server.mjs streams.mjs go2rtc-config.mjs ./
 COPY src ./src

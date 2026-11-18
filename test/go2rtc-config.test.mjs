@@ -129,3 +129,20 @@ test("the input selection also preserves advertised optical-view paths", async (
     ),
   );
 });
+
+test("[fork] every camera stream gets an on-demand H.264 twin, scaled to 1920 by default", async () => {
+  const { yaml } = await generate();
+  assert.ok(
+    yaml.includes(
+      "  CAM1_h264:\n    - ffmpeg:CAM1#video=h264#width=1920\n    - ffmpeg:CAM1#audio=opus#raw=-af asetpts=N/SR/TB\n",
+    ),
+  );
+  assert.ok(!yaml.includes("SENSOR1_h264"), "a non-camera device gets no twin");
+});
+
+test("[fork] the H.264 twin keeps the source size at width 0 and is dropped when disabled", async () => {
+  const full = await generate({ go2rtcH264Width: 0 });
+  assert.ok(full.yaml.includes("  CAM1_h264:\n    - ffmpeg:CAM1#video=h264\n"));
+  const off = await generate({ go2rtcH264: false });
+  assert.ok(!off.yaml.includes("CAM1_h264"));
+});

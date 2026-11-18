@@ -28,3 +28,10 @@ export function requestedView(params) {
   }
   return Number(values[0]);
 }
+
+/**
+ * [fork] Suffix of the H.264 twin go2rtc keeps beside every camera stream (`<id>_h264`). It transcodes on
+ * demand only: nothing runs until a consumer opens the twin. A browser without H.265 WebRTC (most desktop
+ * Chrome/Edge/Firefox) can then play an H.265 camera such as an S3 Pro behind an NVR.
+ */
+export const H264_SUFFIX = "_h264";

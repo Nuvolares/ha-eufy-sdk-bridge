@@ -8,11 +8,27 @@
 // The file contains real serials, so it is gitignored and generated at startup.
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { H264_SUFFIX } from "./src/camera-views.mjs";
 
 // A device that carries live video: a describeDevice() summary with a `stream` path (capabilities
 // include camera/video). This matches what HA turns into a camera entity — using deviceClass here
 // would miss a camera the SDK downgrades to "other" for sitting behind a HomeBase (not direct P2P).
 const isCamera = (d) => Boolean(d.stream);
+
+/**
+ * [fork] The H.264 twin of one camera stream: `<id>_h264`, transcoded from the copy stream by go2rtc's
+ * ffmpeg, plus that stream's opus audio. go2rtc starts a source only when a consumer opens the twin, so
+ * an unwatched twin costs nothing, and the copy stream it reads keeps the bridge's battery-budget and
+ * viewer accounting (it is a consumer of `<id>`). `width` scales the picture down (0 keeps its size).
+ */
+export function h264Twin(id, width = 1920) {
+  const scale = width > 0 ? `#width=${width}` : "";
+  return [
+    `  ${id}${H264_SUFFIX}:`,
+    `    - ffmpeg:${id}#video=h264${scale}`,
+    `    - ffmpeg:${id}#audio=opus#raw=-af asetpts=N/SR/TB`,
+  ];
+}
 
 export async function writeGo2rtcConfig(cfg, devices) {
   const cams = devices.filter(isCamera);
@@ -45,6 +61,7 @@ export async function writeGo2rtcConfig(cfg, devices) {
       lines.push(`    - ffmpeg:${base}${view.stream}#video=copy#async${input}`);
       lines.push(`    - ${base}${audioPath}`);
       lines.push(`    - ffmpeg:${view.id}#audio=opus#raw=-af asetpts=N/SR/TB`);
+      if (cfg.go2rtcH264 !== false) lines.push(...h264Twin(view.id, cfg.go2rtcH264Width));
     }
   }
   const yaml = lines.join("\n") + "\n";
