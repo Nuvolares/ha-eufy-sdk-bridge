@@ -223,10 +223,17 @@ export function createHttpHandler(ctx) {
 
       // Two pictures can sit on disk: the last event's thumbnail, and the last frame of a stream someone
       // watched (live-still.mjs). Either may be the more recent one, so serve whichever is newer.
+      // [fork] A third: the last live burst (mode=live) of the main view. Without it a burst only answered the
+      // request that asked for it, so a timed refresh (the integration's "refresh battery stills") never
+      // reached the camera tile, which reads the persisted pictures. Other views keep theirs in last-live.
+      const burstFile = path.join(eventImageDir, `last-burst-${source.id}.jpg`);
       const candidates = [
         { file: path.join(eventImageDir, `last-live-${source.id}.jpg`), label: "last live picture" },
         ...(view === 0
-          ? [{ file: path.join(eventImageDir, `last-event-${sn}.jpg`), label: "last event thumbnail" }]
+          ? [
+              { file: path.join(eventImageDir, `last-event-${sn}.jpg`), label: "last event thumbnail" },
+              { file: burstFile, label: "last live still" },
+            ]
           : []),
       ];
       /** Serve the newest persisted picture. Instant, and it never touches the camera. */
@@ -305,6 +312,9 @@ export function createHttpHandler(ctx) {
             if (!jpeg) {
               if (snapshotMode === "live") why = "live burst produced no usable image";
               else if (snapshotMode === "auto") why = "mode=auto live burst produced no usable image";
+            } else if (view === 0) {
+              await fs.promises.writeFile(burstFile, jpeg).catch(() => {});
+              ctx.eventLog?.(`/snapshot ${sn} → kept the live still (${jpeg.length}B)`);
             }
           } catch (e) {
             why = `live burst failed: ${e?.message ?? e}`;

@@ -352,3 +352,26 @@ test("snapshot: a newer event thumbnail wins over an older live picture", async 
   const out = await get(handler);
   assert.deepEqual(out.body, JPEG);
 });
+
+test("[fork] a main-view live burst is kept, and later default stills serve it over an older event", async () => {
+  const { handler, calls, dir } = setup({ battery: true });
+  // An older event thumbnail is on disk (setup); the timed refresh asks for a live burst.
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(path.join(dir, "last-event-CAM1.jpg"), old, old);
+  const burst = await get(handler, "/snapshot/CAM1?mode=live");
+  assert.equal(burst.code, 200);
+  assert.equal(burst.body.toString(), "LIVE");
+  assert.equal(fs.readFileSync(path.join(dir, "last-burst-CAM1.jpg")).toString(), "LIVE");
+  // The camera tile's plain request on a battery camera never wakes it, and now gets the fresh still.
+  const tile = await get(handler);
+  assert.equal(tile.code, 200);
+  assert.equal(tile.body.toString(), "LIVE");
+  assert.equal(calls.live, 1);
+});
+
+test("[fork] a failed live burst keeps no still and leaves the event thumbnail in place", async () => {
+  const { handler, dir } = setup({ live: "empty", stored: "throw", battery: true });
+  await get(handler, "/snapshot/CAM1?mode=live");
+  assert.equal(fs.existsSync(path.join(dir, "last-burst-CAM1.jpg")), false);
+  assert.deepEqual((await get(handler)).body, JPEG);
+});
