@@ -253,7 +253,7 @@ test("snapshot: mode=live falls back to stored and persisted images after live f
     const storedOut = await get(fromStored.handler, "/snapshot/CAM1?mode=live");
     assert.equal(storedOut.code, 200);
     assert.equal(storedOut.body.toString(), "STORED");
-    assert.equal(fromStored.calls.live, 1);
+    assert.equal(fromStored.calls.live, 2); // [fork] a battery camera gets a second try
     assert.equal(fromStored.calls.stored, 1);
   }
 
@@ -261,7 +261,7 @@ test("snapshot: mode=live falls back to stored and persisted images after live f
   const persistedOut = await get(fromPersisted.handler, "/snapshot/CAM1?mode=live");
   assert.equal(persistedOut.code, 200);
   assert.deepEqual(persistedOut.body, JPEG);
-  assert.equal(fromPersisted.calls.live, 1);
+  assert.equal(fromPersisted.calls.live, 2); // [fork] second try
   assert.equal(fromPersisted.calls.stored, 1);
 });
 
@@ -270,7 +270,7 @@ test("snapshot: mode=live reports a reason when all acquisition paths return no 
   const out = await get(handler, "/snapshot/CAM1?mode=live");
   assert.equal(out.code, 404);
   assert.equal(JSON.parse(out.body).reason, "live burst produced no usable image");
-  assert.deepEqual(calls, { live: 1, stored: 1 });
+  assert.deepEqual(calls, { live: 2, stored: 1 }); // [fork] second try on a battery camera
 });
 
 test("snapshot: invalid mode is rejected", async () => {
