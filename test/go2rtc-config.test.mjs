@@ -134,15 +134,27 @@ test("[fork] every camera stream gets an on-demand H.264 twin, scaled to 1920 by
   const { yaml } = await generate();
   assert.ok(
     yaml.includes(
-      "  CAM1_h264:\n    - ffmpeg:CAM1#video=h264#width=1920\n    - ffmpeg:CAM1#audio=opus#raw=-af asetpts=N/SR/TB\n",
+      "  CAM1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/CAM1#video=h264#width=1920#async\n" +
+        "    - ffmpeg:CAM1#audio=opus#raw=-af asetpts=N/SR/TB\n",
     ),
   );
   assert.ok(!yaml.includes("SENSOR1_h264"), "a non-camera device gets no twin");
 });
 
+test("[fork] the H.264 twin reads the bridge feed, not the copy stream, and keeps the input template", async () => {
+  // Reading `ffmpeg:IN1` stalls forever when an H.265 camera's H.264 stand-in is swapped out on a cold start.
+  const { yaml } = await generate({}, [{ sn: "IN1", model: "T8400", stream: "/stream/IN1" }]);
+  assert.ok(
+    yaml.includes(
+      "  IN1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/IN1#video=h264#width=1920#async#input=eufy_h264\n",
+    ),
+  );
+  assert.ok(!yaml.includes("- ffmpeg:IN1#video=h264"));
+});
+
 test("[fork] the H.264 twin keeps the source size at width 0 and is dropped when disabled", async () => {
   const full = await generate({ go2rtcH264Width: 0 });
-  assert.ok(full.yaml.includes("  CAM1_h264:\n    - ffmpeg:CAM1#video=h264\n"));
+  assert.ok(full.yaml.includes("  CAM1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/CAM1#video=h264#async\n"));
   const off = await generate({ go2rtcH264: false });
   assert.ok(!off.yaml.includes("CAM1_h264"));
 });

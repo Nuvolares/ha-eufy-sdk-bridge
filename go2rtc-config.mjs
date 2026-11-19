@@ -16,16 +16,22 @@ import { H264_SUFFIX } from "./src/camera-views.mjs";
 const isCamera = (d) => Boolean(d.stream);
 
 /**
- * [fork] The H.264 twin of one camera stream: `<id>_h264`, transcoded from the copy stream by go2rtc's
- * ffmpeg, plus that stream's opus audio. go2rtc starts a source only when a consumer opens the twin, so
- * an unwatched twin costs nothing, and the copy stream it reads keeps the bridge's battery-budget and
- * viewer accounting (it is a consumer of `<id>`). `width` scales the picture down (0 keeps its size).
+ * [fork] The H.264 twin of one camera stream: `<id>_h264`, transcoded by go2rtc's ffmpeg straight from
+ * the bridge's own feed (`videoUrl`), plus the copy stream's opus audio. go2rtc starts a source only when
+ * a consumer opens the twin, so an unwatched twin costs nothing. A second /stream request joins the SDK's
+ * shared live source, so it opens no second camera session.
+ *
+ * It must NOT read the copy stream (`ffmpeg:<id>`): on a cold start an H.265 camera is answered with an
+ * H.264 stand-in, then reconnected as H.265. A transcoder reading the copy stream has fixed its input on
+ * the stand-in and stalls forever (loading, no picture). Reading the feed itself, ffmpeg just restarts on
+ * that reconnect, and its output stays H.264 for the consumer.
+ * `width` scales the picture down (0 keeps its size); `input` is the copy stream's input template.
  */
-export function h264Twin(id, width = 1920) {
+export function h264Twin(id, videoUrl, width = 1920, input = "") {
   const scale = width > 0 ? `#width=${width}` : "";
   return [
     `  ${id}${H264_SUFFIX}:`,
-    `    - ffmpeg:${id}#video=h264${scale}`,
+    `    - ffmpeg:${videoUrl}#video=h264${scale}#async${input}`,
     `    - ffmpeg:${id}#audio=opus#raw=-af asetpts=N/SR/TB`,
   ];
 }
@@ -61,7 +67,8 @@ export async function writeGo2rtcConfig(cfg, devices) {
       lines.push(`    - ffmpeg:${base}${view.stream}#video=copy#async${input}`);
       lines.push(`    - ${base}${audioPath}`);
       lines.push(`    - ffmpeg:${view.id}#audio=opus#raw=-af asetpts=N/SR/TB`);
-      if (cfg.go2rtcH264 !== false) lines.push(...h264Twin(view.id, cfg.go2rtcH264Width));
+      if (cfg.go2rtcH264 !== false)
+        lines.push(...h264Twin(view.id, `${base}${view.stream}`, cfg.go2rtcH264Width, input));
     }
   }
   const yaml = lines.join("\n") + "\n";
