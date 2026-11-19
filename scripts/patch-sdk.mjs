@@ -34,13 +34,9 @@ function patchPowerTier(src) {
   if (src.includes(MAINS_MARKER)) return { src, found: true, changed: false };
   const head = "function cameraPowerTier(model, capabilities) {";
   if (!src.includes(head)) return { src, found: false, changed: false };
-  const guard =
-    `\n  if ([...(${MAINS_MARKER} ?? [])].some((p) => (model ?? "").toUpperCase().startsWith(p))) return "wired";`;
-  return {
-    src: src.replace(head, () => modelSet(MAINS_MARKER, "POWER_MAINS_MODELS", "") + head + guard),
-    found: true,
-    changed: true,
-  };
+  const isMains = `[...(${MAINS_MARKER} ?? [])].some((p) => (model ?? "").toUpperCase().startsWith(p))`;
+  const patched = modelSet(MAINS_MARKER, "POWER_MAINS_MODELS", "") + `${head}\n  if (${isMains}) return "wired";`;
+  return { src: src.replace(head, () => patched), found: true, changed: true };
 }
 
 /** Widen `var <name> = (ctx) => <expr>;` with the models in `marker`'s runtime set. */
@@ -68,10 +64,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     if (changed) writeFileSync(file, src, "utf8");
     const dual = src.includes(DUAL_LENS_MARKER) ? "with" : "WITHOUT (no isNvrDualLensCamera in this SDK)";
     const power = src.includes(MAINS_MARKER) ? "with" : "WITHOUT (no cameraPowerTier in this SDK)";
-    console.log(
-      `[patch-sdk] ${changed ? "patched" : "already patched"} ${dual} the dual-lens list, ${power} the ` +
-        `mains-model list: ${file}`,
-    );
+    const lists = `${dual} the dual-lens list, ${power} the mains-model list`;
+    console.log(`[patch-sdk] ${changed ? "patched" : "already patched"} ${lists}: ${file}`);
   } catch (e) {
     console.error(`[patch-sdk] ${e.message}`);
     process.exit(1);
