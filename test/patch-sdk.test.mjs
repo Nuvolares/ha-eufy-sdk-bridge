@@ -8,6 +8,11 @@ const BETA = [
   'var NVR_MEDIA_CAMERA_MODELS = /* @__PURE__ */ new Set(["T8E00", "T8P00"]);',
   "var isNvrMediaCamera = (ctx) => ctx.model !== void 0 && NVR_MEDIA_CAMERA_MODELS.has(ctx.model);",
   'var isNvrDualLensCamera = (ctx) => ctx.model === "T8E00";',
+  'var MAINS_CAMERA_MODELS = ["T8E00"];',
+  "function cameraPowerTier(model, capabilities) {",
+  '  const mains = MAINS_CAMERA_MODELS.some((p) => (model ?? "").startsWith(p));',
+  '  return capabilities.has("battery") && !mains ? "battery" : "wired";',
+  "}",
   "export { isNvrMediaCamera };",
 ].join("\n");
 
@@ -87,6 +92,30 @@ test("[fork] an SDK without the dual-lens check still gets the media patch", () 
   assert.equal(changed, true);
   assert.ok(src.includes("__FORK_NVR_EXTRA_MEDIA_MODELS"));
   assert.ok(!src.includes("__FORK_NVR_DUAL_LENS_MODELS"));
+});
+
+function loadTier(src) {
+  return new Function(`${src.replace("export { isNvrMediaCamera };", "")}\nreturn cameraPowerTier;`)();
+}
+
+test("[fork] POWER_MAINS_MODELS makes a battery-capable model wired; unset changes nothing", () => {
+  const { src } = patchSdk(BETA);
+  const battery = new Set(["battery"]);
+  const prev = process.env.POWER_MAINS_MODELS;
+  try {
+    delete process.env.POWER_MAINS_MODELS;
+    assert.equal(loadTier(src)("T8214", battery), "battery");
+    assert.equal(loadTier(src)("T8E00", battery), "wired");
+    process.env.POWER_MAINS_MODELS = " t8214 ";
+    const tier = loadTier(src);
+    assert.equal(tier("T8214", battery), "wired");
+    assert.equal(tier("T8162", battery), "battery");
+    assert.equal(tier(undefined, battery), "battery");
+  } finally {
+    if (prev === undefined) delete process.env.POWER_MAINS_MODELS;
+    else process.env.POWER_MAINS_MODELS = prev;
+  }
+  assert.deepEqual(patchSdk(src), { src, changed: false });
 });
 
 test("[fork] a changed SDK fails the patch loudly", () => {

@@ -7,7 +7,11 @@
 // 2. On that media call the SDK offers the second lens (view 1, the PTZ lens) only for the models in
 //    `isNvrDualLensCamera` (the S4 Max PoE, T8E00). This adds NVR_DUAL_LENS_MODELS (same format; default
 //    "T8172", which has the same fixed + PTZ lens pair). It only matters for a model on the media call.
-// Set either variable to "" to restore the SDK's own list without rebuilding.
+// 3. `cameraPowerTier` calls a camera "battery" when it has the battery capability and is not a known
+//    mains model. A wired doorbell with a backup cell (a T8214 on a transformer) then gets every battery
+//    rule: a 45 s live budget, no HLS in HA, no live stills. POWER_MAINS_MODELS (default "", none) makes
+//    the listed models "wired". Only the tier changes: the battery-level properties keep their own check.
+// Set any of these variables to "" to restore the SDK's own list without rebuilding.
 //
 // Run after `npm install`: `node scripts/patch-sdk.mjs`. Idempotent. Exits non-zero when the SDK no
 // longer has the media-call check, so a changed SDK fails the build loudly instead of silently unpatched.
@@ -17,12 +21,27 @@ import { fileURLToPath } from "node:url";
 
 export const MEDIA_MARKER = "__FORK_NVR_EXTRA_MEDIA_MODELS";
 export const DUAL_LENS_MARKER = "__FORK_NVR_DUAL_LENS_MODELS";
+export const MAINS_MARKER = "__FORK_POWER_MAINS_MODELS";
 const SDK_BUNDLE = new URL("../node_modules/@mega-yfue/eufy-sdk/dist/index.js", import.meta.url);
 const file = process.argv[2] ?? fileURLToPath(SDK_BUNDLE);
 
-const modelSet = (marker, envName) =>
-  `var ${marker} = new Set((process.env.${envName} ?? "T8172")` +
-  `.split(",").map((s) => s.trim()).filter(Boolean));\n`;
+const modelSet = (marker, envName, fallback = "T8172") =>
+  `var ${marker} = new Set((process.env.${envName} ?? "${fallback}")` +
+  `.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));\n`;
+
+/** Make the models in POWER_MAINS_MODELS "wired" in `cameraPowerTier` (prefix match, like the SDK's list). */
+function patchPowerTier(src) {
+  if (src.includes(MAINS_MARKER)) return { src, found: true, changed: false };
+  const head = "function cameraPowerTier(model, capabilities) {";
+  if (!src.includes(head)) return { src, found: false, changed: false };
+  const guard =
+    `\n  if ([...(${MAINS_MARKER} ?? [])].some((p) => (model ?? "").toUpperCase().startsWith(p))) return "wired";`;
+  return {
+    src: src.replace(head, () => modelSet(MAINS_MARKER, "POWER_MAINS_MODELS", "") + head + guard),
+    found: true,
+    changed: true,
+  };
+}
 
 /** Widen `var <name> = (ctx) => <expr>;` with the models in `marker`'s runtime set. */
 function widen(src, name, marker, envName) {
@@ -39,7 +58,8 @@ export function patchSdk(src) {
   if (!media.found)
     throw new Error("isNvrMediaCamera not found in the SDK bundle — the SDK changed; update this patch");
   const dual = widen(media.src, "isNvrDualLensCamera", DUAL_LENS_MARKER, "NVR_DUAL_LENS_MODELS");
-  return { src: dual.src, changed: media.changed || dual.changed };
+  const power = patchPowerTier(dual.src);
+  return { src: power.src, changed: media.changed || dual.changed || power.changed };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -47,7 +67,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const { src, changed } = patchSdk(readFileSync(file, "utf8"));
     if (changed) writeFileSync(file, src, "utf8");
     const dual = src.includes(DUAL_LENS_MARKER) ? "with" : "WITHOUT (no isNvrDualLensCamera in this SDK)";
-    console.log(`[patch-sdk] ${changed ? "patched" : "already patched"} ${dual} the dual-lens list: ${file}`);
+    const power = src.includes(MAINS_MARKER) ? "with" : "WITHOUT (no cameraPowerTier in this SDK)";
+    console.log(
+      `[patch-sdk] ${changed ? "patched" : "already patched"} ${dual} the dual-lens list, ${power} the ` +
+        `mains-model list: ${file}`,
+    );
   } catch (e) {
     console.error(`[patch-sdk] ${e.message}`);
     process.exit(1);
