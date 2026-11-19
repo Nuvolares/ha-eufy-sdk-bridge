@@ -23,6 +23,7 @@ function setup({ live, stored, env = {}, persist = true, battery = true, ready =
     snapshotLive: async () => {
       calls.live += 1;
       if (live === "throw") throw new Error("P2P unreachable");
+      if (live === "throw-once" && calls.live === 1) throw new Error("warm-timeout");
       if (live === "empty") return { jpeg: undefined };
       return { jpeg: Buffer.from("LIVE") };
     },
@@ -374,4 +375,23 @@ test("[fork] a failed live burst keeps no still and leaves the event thumbnail i
   await get(handler, "/snapshot/CAM1?mode=live");
   assert.equal(fs.existsSync(path.join(dir, "last-burst-CAM1.jpg")), false);
   assert.deepEqual((await get(handler)).body, JPEG);
+});
+
+test("[fork] mode=live on a battery camera tries a second time when the first burst fails", async () => {
+  const { handler, calls, dir } = setup({ live: "throw-once", stored: "throw", battery: true });
+  const out = await get(handler, "/snapshot/CAM1?mode=live");
+  assert.equal(out.code, 200);
+  assert.equal(out.body.toString(), "LIVE");
+  assert.equal(calls.live, 2);
+  assert.equal(fs.readFileSync(path.join(dir, "last-burst-CAM1.jpg")).toString(), "LIVE");
+});
+
+test("[fork] a mains camera's mode=live and a battery camera's failing burst stop after their tries", async () => {
+  const mains = setup({ live: "throw-once", stored: "throw", battery: false });
+  await get(mains.handler, "/snapshot/CAM1?mode=live");
+  assert.equal(mains.calls.live, 1);
+  const battery = setup({ live: "throw", stored: "throw", battery: true });
+  const out = await get(battery.handler, "/snapshot/CAM1?mode=live");
+  assert.equal(battery.calls.live, 2);
+  assert.deepEqual(out.body, JPEG); // falls back to the event thumbnail on disk
 });

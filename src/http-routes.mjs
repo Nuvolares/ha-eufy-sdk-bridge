@@ -307,17 +307,27 @@ export function createHttpHandler(ctx) {
         }
         let jpeg;
         if (wantLive) {
-          try {
-            ({ jpeg } = await cam.snapshotLive(view === 0 ? undefined : { view }));
-            if (!jpeg) {
-              if (snapshotMode === "live") why = "live burst produced no usable image";
-              else if (snapshotMode === "auto") why = "mode=auto live burst produced no usable image";
-            } else if (view === 0) {
-              await fs.promises.writeFile(burstFile, jpeg).catch(() => {});
-              ctx.eventLog?.(`/snapshot ${sn} → kept the live still (${jpeg.length}B)`);
+          // [fork] An explicit mode=live on a battery camera gets a second try. The SDK gives a burst a fixed
+          // 20 s to warm up, and a camera behind an NVR (S3 Pro) can take longer to wake. By the second try it
+          // is awake. /stream gets around the same limit by retrying its open.
+          const tries = snapshotMode === "live" && onBattery ? 2 : 1;
+          for (let attempt = 1; attempt <= tries && !jpeg; attempt++) {
+            try {
+              ({ jpeg } = await cam.snapshotLive(view === 0 ? undefined : { view }));
+              if (!jpeg) {
+                if (snapshotMode === "live") why = "live burst produced no usable image";
+                else if (snapshotMode === "auto") why = "mode=auto live burst produced no usable image";
+              } else {
+                why = "";
+                const label = view === 0 ? sn : `${sn} view ${view}`;
+                if (snapshotMode === "live")
+                  ctx.eventLog?.(`/snapshot ${label} → kept the live still (${jpeg.length}B, try ${attempt})`);
+                if (view === 0) await fs.promises.writeFile(burstFile, jpeg).catch(() => {});
+              }
+            } catch (e) {
+              why = `live burst failed: ${e?.message ?? e}`;
+              if (attempt < tries) ctx.eventLog?.(`/snapshot ${sn} → ${why} — trying once more`);
             }
-          } catch (e) {
-            why = `live burst failed: ${e?.message ?? e}`;
           }
         } else if (await servePersisted(why)) {
           // No live burst wanted, and the disk copy holds the same picture the retained thumbnail would:
