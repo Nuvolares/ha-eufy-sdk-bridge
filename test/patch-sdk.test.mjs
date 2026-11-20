@@ -69,29 +69,18 @@ function loadDual(src) {
   return new Function(`${src.replace("export { isNvrMediaCamera };", "")}\nreturn isNvrDualLensCamera;`)();
 }
 
-test("[fork] the dual-lens check admits T8172 by default, keeps T8E00, and is overridable", () => {
+test("[fork] the SDK's dual-lens check is left alone: only the S4 Max PoE gets a second lens", () => {
   const { src } = patchSdk(BETA);
-  const prev = process.env.NVR_DUAL_LENS_MODELS;
-  try {
-    delete process.env.NVR_DUAL_LENS_MODELS;
-    const isDual = loadDual(src);
-    assert.equal(isDual({ model: "T8172" }), true);
-    assert.equal(isDual({ model: "T8E00" }), true);
-    assert.equal(isDual({ model: "T8162" }), false);
-    process.env.NVR_DUAL_LENS_MODELS = "";
-    assert.equal(loadDual(src)({ model: "T8172" }), false);
-    assert.equal(loadDual(src)({ model: "T8E00" }), true);
-  } finally {
-    if (prev === undefined) delete process.env.NVR_DUAL_LENS_MODELS;
-    else process.env.NVR_DUAL_LENS_MODELS = prev;
-  }
+  assert.ok(src.includes('var isNvrDualLensCamera = (ctx) => ctx.model === "T8E00";'));
+  const isDual = loadDual(src);
+  assert.equal(isDual({ model: "T8E00" }), true);
+  assert.equal(isDual({ model: "T8172" }), false);
 });
 
-test("[fork] an SDK without the dual-lens check still gets the media patch", () => {
+test("[fork] a minimal SDK still gets the media patch", () => {
   const { src, changed } = patchSdk('var isNvrMediaCamera = (ctx) => ctx.model === "T8E00";');
   assert.equal(changed, true);
   assert.ok(src.includes("__FORK_NVR_EXTRA_MEDIA_MODELS"));
-  assert.ok(!src.includes("__FORK_NVR_DUAL_LENS_MODELS"));
 });
 
 function loadTier(src) {
