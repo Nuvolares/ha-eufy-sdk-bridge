@@ -24,6 +24,8 @@ function json(res, code, body) {
 // Throttle the go2rtc consumer probe per device (a stream can be re-requested on a tight retry loop).
 // `0` disables the probe; the immediate-requester line still logs on every request.
 const STREAM_CONSUMER_LOG_MS = Number(process.env.BRIDGE_STREAM_CONSUMER_LOG_MS ?? 15000);
+// [fork] How long the second try of a battery camera's mode=live still waits for a clean keyframe.
+export const SECOND_TRY_KEYFRAME_MS = 40000;
 
 /** True for the SDK's "the station's P2P session never connected" (StationUnreachableError / session timeout). */
 function isUnreachable(e) {
@@ -309,11 +311,16 @@ export function createHttpHandler(ctx) {
         if (wantLive) {
           // [fork] An explicit mode=live on a battery camera gets a second try. The SDK gives a burst a fixed
           // 20 s to warm up, and a camera behind an NVR (S3 Pro) can take longer to wake. By the second try it
-          // is awake. /stream gets around the same limit by retrying its open.
+          // is awake. /stream gets around the same limit by retrying its open. The second try also waits longer
+          // for a clean keyframe: an awake S3 Pro often sends none within the SDK's default 20 s.
           const tries = snapshotMode === "live" && onBattery ? 2 : 1;
           for (let attempt = 1; attempt <= tries && !jpeg; attempt++) {
             try {
-              ({ jpeg } = await cam.snapshotLive(view === 0 ? undefined : { view }));
+              const opts = {
+                ...(view === 0 ? {} : { view }),
+                ...(attempt > 1 ? { timeoutMs: SECOND_TRY_KEYFRAME_MS } : {}),
+              };
+              ({ jpeg } = await cam.snapshotLive(Object.keys(opts).length ? opts : undefined));
               if (!jpeg) {
                 if (snapshotMode === "live") why = "live burst produced no usable image";
                 else if (snapshotMode === "auto") why = "mode=auto live burst produced no usable image";

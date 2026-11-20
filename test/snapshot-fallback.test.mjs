@@ -19,9 +19,11 @@ function setup({ live, stored, env = {}, persist = true, battery = true, ready =
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "snap-"));
   if (persist) fs.writeFileSync(path.join(dir, "last-event-CAM1.jpg"), JPEG);
   const calls = { live: 0, stored: 0 };
+  const liveOpts = [];
   const cam = {
-    snapshotLive: async () => {
+    snapshotLive: async (opts) => {
       calls.live += 1;
+      liveOpts.push(opts);
       if (live === "throw") throw new Error("P2P unreachable");
       if (live === "throw-once" && calls.live === 1) throw new Error("warm-timeout");
       if (live === "empty") return { jpeg: undefined };
@@ -60,7 +62,7 @@ function setup({ live, stored, env = {}, persist = true, battery = true, ready =
       },
     },
   };
-  return { handler: createHttpHandler(ctx), calls, dir };
+  return { handler: createHttpHandler(ctx), calls, dir, liveOpts };
 }
 
 /** Run one GET and capture status + body. */
@@ -378,11 +380,12 @@ test("[fork] a failed live burst keeps no still and leaves the event thumbnail i
 });
 
 test("[fork] mode=live on a battery camera tries a second time when the first burst fails", async () => {
-  const { handler, calls, dir } = setup({ live: "throw-once", stored: "throw", battery: true });
+  const { handler, calls, dir, liveOpts } = setup({ live: "throw-once", stored: "throw", battery: true });
   const out = await get(handler, "/snapshot/CAM1?mode=live");
   assert.equal(out.code, 200);
   assert.equal(out.body.toString(), "LIVE");
   assert.equal(calls.live, 2);
+  assert.deepEqual(liveOpts, [undefined, { timeoutMs: 40000 }]); // the second try waits longer for a keyframe
   assert.equal(fs.readFileSync(path.join(dir, "last-burst-CAM1.jpg")).toString(), "LIVE");
 });
 
