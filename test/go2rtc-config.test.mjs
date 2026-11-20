@@ -134,7 +134,7 @@ test("[fork] every camera stream gets an on-demand H.264 twin, scaled to 1920 by
   const { yaml } = await generate();
   assert.ok(
     yaml.includes(
-      "  CAM1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/CAM1#video=h264#width=1920#async\n" +
+      "  CAM1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/CAM1#video=h264#width=1920#height=-2#async\n" +
         "    - ffmpeg:CAM1#audio=opus#raw=-af asetpts=N/SR/TB\n",
     ),
   );
@@ -146,7 +146,7 @@ test("[fork] the H.264 twin reads the bridge feed, not the copy stream, and keep
   const { yaml } = await generate({}, [{ sn: "IN1", model: "T8400", stream: "/stream/IN1" }]);
   assert.ok(
     yaml.includes(
-      "  IN1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/IN1#video=h264#width=1920#async#input=eufy_h264\n",
+      "  IN1_h264:\n    - ffmpeg:http://127.0.0.1:3000/stream/IN1#video=h264#width=1920#height=-2#async#input=eufy_h264\n",
     ),
   );
   assert.ok(!yaml.includes("- ffmpeg:IN1#video=h264"));

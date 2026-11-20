@@ -26,9 +26,11 @@ const isCamera = (d) => Boolean(d.stream);
  * the stand-in and stalls forever (loading, no picture). Reading the feed itself, ffmpeg just restarts on
  * that reconnect, and its output stays H.264 for the consumer.
  * `width` scales the picture down (0 keeps its size); `input` is the copy stream's input template.
+ * The height is rounded to an even number (`-2`): libx264 refuses an odd height, and a picture that is
+ * not 16:9 (an NVR's stitched dual-lens frame scaled to 1920x2171) otherwise kills the twin.
  */
 export function h264Twin(id, videoUrl, width = 1920, input = "") {
-  const scale = width > 0 ? `#width=${width}` : "";
+  const scale = width > 0 ? `#width=${width}#height=-2` : "";
   return [
     `  ${id}${H264_SUFFIX}:`,
     `    - ffmpeg:${videoUrl}#video=h264${scale}#async${input}`,
